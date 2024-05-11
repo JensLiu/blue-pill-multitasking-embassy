@@ -1,4 +1,10 @@
-use core::fmt;
+use core::{
+    cell::Cell,
+    fmt,
+    future::{poll_fn, Future},
+    pin::Pin,
+    task::Poll,
+};
 
 use defmt::Format;
 use embassy_futures::select::{select, Either};
@@ -7,14 +13,18 @@ use embassy_stm32::{
     peripherals::{self, DMA1_CH6, DMA1_CH7},
 };
 
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
+use embassy_sync::{
+    blocking_mutex::raw::{CriticalSectionRawMutex, RawMutex},
+    signal::{self, Signal},
+};
 use embassy_time::{with_timeout, Duration, Timer};
+use embedded_io_async::Write;
 use heapless::String;
 
 use crate::{
     fmt::{error, info},
     io::writer_task,
-    sensor::dht20_impl::Dht20,
+    sensor::dht20_impl::Dht20, with_condition::with_condition,
 };
 
 // the peripherals, ports and DMA usage of this task is specified here
@@ -42,14 +52,17 @@ pub async fn task(i2c: MyI2cType) {
         error!("Initialisation Failed")
     }
 
+    // loop {
+    //     if let Either::First(running) =
+    //         select(STATUS_SIGNAL.wait(), check_sensor(&mut sensor)).await
+    //     {
+    //         if !running {
+    //             on_wait(&mut sensor).await
+    //         }
+    //     }
+    // }
     loop {
-        if let Either::First(running) =
-            select(STATUS_SIGNAL.wait(), check_sensor(&mut sensor)).await
-        {
-            if !running {
-                on_wait(&mut sensor).await
-            }
-        }
+        with_condition(STATUS_SIGNAL.wait(), check_sensor(&mut sensor)).await
     }
 }
 
@@ -62,9 +75,8 @@ async fn check_sensor(sensor: &mut MySensor) {
             format_args!("Humidity: {}, Temperature: {}", hum, temp),
         )
         .unwrap();
-        let len = s.len();
-        info!("{}", s);
-        writer_task::DATAPIPE.write(&buf[..len]).await;
+        let len = s.len(); // <- lifetime of s ends here
+        writer_task::DATAPIPE.write_all(&buf[..len]).await;
     }
     Timer::after(Duration::from_millis(500)).await;
 }

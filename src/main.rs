@@ -15,6 +15,7 @@ use embassy_stm32::{bind_interrupts, i2c, peripherals, time, usart};
 mod blink_task;
 mod io;
 mod sensor;
+mod with_condition;
 
 use io::{reader_task, writer_task};
 use sensor::sensor_task;

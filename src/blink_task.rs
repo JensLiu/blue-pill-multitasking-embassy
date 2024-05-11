@@ -7,6 +7,8 @@ use embassy_stm32::{
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Timer};
 
+use crate::io::writer_task;
+
 type MyLedPin = peripherals::PB13;
 
 pub static STATUS_SIGNAL: Signal<CriticalSectionRawMutex, bool> = Signal::new();
@@ -27,6 +29,7 @@ pub async fn task(led_pin: MyLedPin) {
 async fn blink(led: &mut Output<'_, MyLedPin>) {
     // info!("BLINK TASK RUNNING");
     // info!("blink begin");
+    writer_task::DATAPIPE.write_all("I blinked".as_bytes()).await;
     led.set_high();
     // info!("high yeild");
     Timer::after(Duration::from_millis(100)).await;
